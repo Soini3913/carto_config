@@ -1,0 +1,76 @@
+<!--
+  Copyright 2016 The Cartographer Authors
+
+  Licensed under the Apache License, Version 2.0 (the "License");
+  you may not use this file except in compliance with the License.
+  You may obtain a copy of the License at
+
+       http://www.apache.org/licenses/LICENSE-2.0
+
+  Unless required by applicable law or agreed to in writing, software
+  distributed under the License is distributed on an "AS IS" BASIS,
+  WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+  See the License for the specific language governing permissions and
+  limitations under the License.
+-->
+
+<launch>
+  <arg name="offline" default="true"/>
+  <arg name="bag_filenames" default=""/>
+  <arg name="localization" default="false"/>
+  <arg name="pointcloud_topic" default="/kitti/velo/pointcloud" />
+  <arg name="odom_topic" default="/sensor/vehicle/odometry"/>
+  <arg name="imu_topic" default="/kitti/oxts/imu"/>
+  <arg name="fix_topic" default="/kitti/oxts/gps/fix"/>
+  <arg name="map_filename" default="" />
+  <arg name="rviz" default="True" />
+  <!-- only used in offline mapping right now -->
+  <arg name="config" default="kitti.lua" />
+
+  <param name="robot_description"
+    textfile="$(find localization_launch)/etc/kitti.urdf" />
+
+  <node name="robot_state_publisher" pkg="robot_state_publisher" type="robot_state_publisher" />
+
+  <node if="$(arg rviz)" name="rviz" pkg="rviz" type="rviz" args="-d $(find localization_launch)/etc/cartographer_mapping.rviz" />
+
+  <group if="$(arg localization)">
+    <node name="cartographer_node" pkg="cartographer_ros"
+        type="cartographer_node" args="
+            -configuration_directory $(find localization_launch)/etc/cartographer
+            -configuration_basename kitti_localization.lua
+            -load_state_filename $(arg map_filename)"
+        output="screen">
+      <remap from="points2" to="$(arg pointcloud_topic)" />
+      <remap from="imu" to="$(arg imu_topic)" />
+      <remap from="fix" to="$(arg fix_topic)"/>
+    </node>
+  </group>
+  
+  <group unless="$(arg localization)">
+    <node unless="$(arg offline)" name="cartographer_node" pkg="cartographer_ros"
+      type="cartographer_node" args="
+          -configuration_directory $(find localization_launch)/etc/cartographer
+          -configuration_basename $(arg config)"  output="screen">
+      <remap from="points2" to="$(arg pointcloud_topic)" />
+      <remap from="imu" to="$(arg imu_topic)" />
+      <remap from="fix" to="$(arg fix_topic)"/>
+
+    </node>
+
+    <node if="$(arg offline)" name="cartographer_offline_node" pkg="cartographer_ros"
+      type="cartographer_offline_node" args="
+          -configuration_directory $(find localization_launch)/etc/cartographer
+          -configuration_basenames $(arg config)
+          -bag_filenames $(arg bag_filenames)
+          -urdf_filenames $(find localization_launch)/etc/kitti.urdf"
+      output="screen">
+        <remap from="points2" to="$(arg pointcloud_topic)" />
+        <remap from="imu" to="$(arg imu_topic)" />
+        <remap from="fix" to="$(arg fix_topic)"/>
+
+    </node>
+  </group>
+  <node name="cartographer_occupancy_grid_node" pkg="cartographer_ros"
+      type="cartographer_occupancy_grid_node" args="-resolution 0.05" />
+</launch>
